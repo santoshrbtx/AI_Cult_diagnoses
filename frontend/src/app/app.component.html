@@ -1,0 +1,159 @@
+<div class="shell">
+  <header>
+    <h1>AICult</h1>
+    <p class="tag">Incident diagnosis & remediation workflow</p>
+  </header>
+
+  <div class="grid">
+    <!-- Sidebar: config form -->
+    <aside class="card">
+      <h2>Configuration</h2>
+      <label>
+        Scenario
+        <select [(ngModel)]="cfg.scenario" [disabled]="running">
+          <option *ngFor="let s of scenarios" [value]="s">{{ s }}</option>
+        </select>
+      </label>
+      <label>
+        Users
+        <input type="number" min="10" max="500" [(ngModel)]="cfg.users" [disabled]="running" />
+      </label>
+      <label>
+        Initial DB pool
+        <input type="number" min="1" max="200" [(ngModel)]="cfg.db_pool" [disabled]="running" />
+      </label>
+      <label>
+        Initial thread pool
+        <input type="number" min="1" max="200" [(ngModel)]="cfg.thread_pool" [disabled]="running" />
+      </label>
+      <label>
+        Seed
+        <input type="number" min="0" [(ngModel)]="cfg.seed" [disabled]="running" />
+      </label>
+      <label>
+        Target success rate
+        <input type="number" min="0.5" max="1" step="0.05" [(ngModel)]="cfg.target_success_rate" [disabled]="running" />
+      </label>
+      <label>
+        Max iterations
+        <input type="number" min="1" max="20" [(ngModel)]="cfg.max_iterations" [disabled]="running" />
+      </label>
+
+      <div class="actions">
+        <button class="primary" (click)="start()" [disabled]="running">Start workflow</button>
+        <button class="ghost" (click)="reset()" [disabled]="running">Reset</button>
+      </div>
+      <p class="err" *ngIf="errorMessage">{{ errorMessage }}</p>
+    </aside>
+
+    <!-- Main: stepper + decision + table -->
+    <main>
+      <section class="card">
+        <h2>Workflow</h2>
+        <ol class="stepper stepper-horizontal">
+          <li *ngFor="let s of steps; let last = last"
+              [class.active]="s.status === 'running'"
+              [class.done]="s.status === 'done'"
+              [class.err]="s.status === 'error'"
+              [class.last]="last">
+            <div class="node">
+              <span class="dot">
+                <span class="spinner" *ngIf="s.status === 'running'"></span>
+                <span class="glyph" *ngIf="s.status !== 'running'">{{ iconFor(s.status) }}</span>
+              </span>
+              <span class="label">{{ s.label }}</span>
+              <span class="status">{{ s.status }}</span>
+            </div>
+            <div class="connector" *ngIf="!last"></div>
+          </li>
+        </ol>
+
+        <div class="running-banner" *ngIf="running && !pendingDecision">
+          <span class="spinner sm"></span>
+          <span>Running iteration {{ currentIteration || 0 }} — {{ activePhaseLabel() }}</span>
+        </div>
+      </section>
+
+      <section class="card decision" *ngIf="pendingDecision">
+        <h2>Iteration {{ currentIteration }} — proposed change</h2>
+
+        <div class="tiles">
+          <div class="tile">
+            <div class="tile-label">db_pool_size</div>
+            <div class="tile-value">{{ pendingChange?.db_pool_size ?? '—' }}</div>
+            <div class="tile-delta" *ngIf="poolDelta('db') !== null">
+              Δ {{ poolDelta('db')! >= 0 ? '+' : '' }}{{ poolDelta('db') }}
+            </div>
+          </div>
+          <div class="tile">
+            <div class="tile-label">thread_pool_size</div>
+            <div class="tile-value">{{ pendingChange?.thread_pool_size ?? '—' }}</div>
+            <div class="tile-delta" *ngIf="poolDelta('thread') !== null">
+              Δ {{ poolDelta('thread')! >= 0 ? '+' : '' }}{{ poolDelta('thread') }}
+            </div>
+          </div>
+        </div>
+
+        <p><strong>Decision:</strong> {{ pendingDecision.decision }}</p>
+        <p><strong>Primary cause:</strong> {{ pendingDecision.primaryCause }}</p>
+        <p *ngIf="pendingDecision.secondaryEffect"><em>Secondary:</em> {{ pendingDecision.secondaryEffect }}</p>
+
+        <details *ngIf="pendingDecision.supportingEvidence?.length">
+          <summary>Supporting evidence</summary>
+          <ul>
+            <li *ngFor="let ev of pendingDecision.supportingEvidence">{{ ev }}</li>
+          </ul>
+        </details>
+        <details *ngIf="pendingDecision.executionOrder?.length">
+          <summary>Execution order</summary>
+          <ol>
+            <li *ngFor="let step of pendingDecision.executionOrder">{{ step }}</li>
+          </ol>
+        </details>
+
+        <div class="actions">
+          <button class="primary" (click)="approve()">Approve &amp; retest</button>
+          <button class="danger" (click)="reject()">Reject &amp; stop</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Per-iteration results</h2>
+        <table *ngIf="iterations.length; else emptyTable">
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>DB pool</th>
+              <th>Thread pool</th>
+              <th>Success</th>
+              <th>DB timeout</th>
+              <th>Thread timeout</th>
+              <th>p50 ms</th>
+              <th>p95 ms</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let r of iterations">
+              <td>{{ r.step }}</td>
+              <td>{{ r.db_pool }}</td>
+              <td>{{ r.thread_pool }}</td>
+              <td>{{ r.success_rate }}</td>
+              <td>{{ r.db_timeout }}</td>
+              <td>{{ r.thread_timeout }}</td>
+              <td>{{ r.p50_ms }}</td>
+              <td>{{ r.p95_ms }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <ng-template #emptyTable>
+          <p class="hint">No runs yet. Start the workflow to see baseline + iteration rows.</p>
+        </ng-template>
+      </section>
+
+      <section class="card done" *ngIf="doneReason">
+        <h2>Workflow complete</h2>
+        <p>{{ doneReason }}</p>
+      </section>
+    </main>
+  </div>
+</div>
